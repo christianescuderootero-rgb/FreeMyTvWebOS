@@ -114,6 +114,89 @@
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
         }
 
+        /* Lofi Night Scene: darker sky, moon, rain, and a skyline drawn behind the UI */
+        body.lofi-on {
+            background: linear-gradient(180deg, #06050d 0%, #0c0a1a 40%, #151027 72%, #07060c 100%);
+        }
+
+        body.lofi-on .ambient-glow {
+            opacity: 0.45;
+        }
+
+        .lofi-scene {
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
+            display: none;
+        }
+
+        body.lofi-on .lofi-scene {
+            display: block;
+        }
+
+        .lofi-stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2px;
+            height: 2px;
+            border-radius: 50%;
+            animation: lofi-twinkle 6s ease-in-out infinite alternate;
+        }
+
+        .lofi-moon {
+            position: absolute;
+            top: 13%;
+            left: 66%;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 38% 35%, #fff4dc 0%, #f1d9b0 55%, #c9a97c 100%);
+            box-shadow: 0 0 60px 18px rgba(255, 214, 160, 0.16), 0 0 160px 60px rgba(160, 120, 255, 0.08);
+            opacity: 0.85;
+        }
+
+        .lofi-rain {
+            position: absolute;
+            top: -100px; right: 0; bottom: 0; left: 0;
+            background-image: repeating-linear-gradient(105deg, rgba(180, 190, 255, 0.07) 0px, rgba(180, 190, 255, 0.07) 1px, transparent 1px, transparent 18px);
+            animation: lofi-rain 0.9s linear infinite;
+            opacity: 0.55;
+        }
+
+        .lofi-city {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 46%;
+        }
+
+        .lofi-vignette {
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.55) 100%);
+        }
+
+        @keyframes lofi-twinkle {
+            from { opacity: 0.45; }
+            to { opacity: 1; }
+        }
+
+        @keyframes lofi-rain {
+            from { transform: translate3d(0, 0, 0); }
+            to { transform: translate3d(-5px, 100px, 0); }
+        }
+
+        :root.perf-mode .lofi-stars,
+        body.perf-mode .lofi-stars,
+        :root.perf-mode .lofi-rain,
+        body.perf-mode .lofi-rain {
+            animation: none;
+        }
+
         /* Ambient Dynamic Glow */
         .ambient-glow {
             position: absolute;
@@ -884,7 +967,7 @@
         /* OLED-Safe Idle Screensaver */
         .screensaver {
             position: fixed;
-            inset: 0;
+            top: 0; right: 0; bottom: 0; left: 0;
             background: #000000;
             z-index: 3000;
             display: none;
@@ -931,6 +1014,13 @@
     </script>
 </head>
 <body>
+    <div class="lofi-scene" id="lofiScene" aria-hidden="true">
+        <div class="lofi-stars" id="lofiStars"></div>
+        <div class="lofi-moon"></div>
+        <svg class="lofi-city" id="lofiCity" viewBox="0 0 1920 500" preserveAspectRatio="none"></svg>
+        <div class="lofi-rain"></div>
+        <div class="lofi-vignette"></div>
+    </div>
     <div class="ambient-glow" id="ambientGlow"></div>
     <div class="toast-msg" id="toastMsg" role="status" aria-live="polite">Launching...</div>
 
@@ -1040,6 +1130,27 @@
                             <option value="12h">12-Hour (8:30 PM)</option>
                         </select>
                     </div>
+                    <div class="field-group">
+                        <label>Temperature</label>
+                        <select class="field-input modal-nav" id="cfgTempUnit">
+                            <option value="F">Fahrenheit (°F)</option>
+                            <option value="C">Celsius (°C)</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Lofi Night Scene</label>
+                        <select class="field-input modal-nav" id="cfgLofiScene">
+                            <option value="on">On (Dark City & Rain)</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>Lofi Music</label>
+                        <select class="field-input modal-nav" id="cfgLofiMusic">
+                            <option value="on">On (Chill Beats)</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="settings-row" style="margin-top: 14px;">
                     <div class="field-group">
@@ -1075,7 +1186,7 @@
             <div class="drawer-current">
                 <span class="drawer-current-icon" id="drawerIcon">☀️</span>
                 <div>
-                    <div class="drawer-current-temp" id="drawerTemp">--°C</div>
+                    <div class="drawer-current-temp" id="drawerTemp">--°</div>
                     <div class="drawer-current-sub" id="drawerCityLabel">Loading...</div>
                 </div>
             </div>
@@ -1221,6 +1332,9 @@
             { title: 'Stranger Things', badge: 'Sci-Fi • 8.6★', service: 'Watch on Netflix', app: 'netflix', desc: 'A group of kids uncover supernatural mysteries in the small town of Hawkins, Indiana.', poster: '', color: '#ff0000' }
         ];
 
+        // US viewers expect °F and a 12-hour clock; everywhere else defaults to °C / 24h.
+        var IS_US_LOCALE = /-US$/i.test(navigator.language || '');
+
         // --- Persistent State ---
         var state = {
             favorites: JSON.parse(localStorage.getItem('fmtv_favorites') || 'null') || DEFAULT_FAVORITES.slice(),
@@ -1229,7 +1343,12 @@
             lat: parseFloat(localStorage.getItem('fmtv_lat') || '0'),
             lon: parseFloat(localStorage.getItem('fmtv_lon') || '0'),
             theme: localStorage.getItem('fmtv_theme') || 'auto',
-            clockFormat: localStorage.getItem('fmtv_clock_format') || '24h',
+            clockFormat: localStorage.getItem('fmtv_clock_format') || (IS_US_LOCALE ? '12h' : '24h'),
+            tempUnit: localStorage.getItem('fmtv_temp_unit') || (IS_US_LOCALE ? 'F' : 'C'),
+            lofiScene: localStorage.getItem('fmtv_lofi_scene') || 'on',
+            lofiMusic: localStorage.getItem('fmtv_lofi_music') || 'on',
+            // Set of app IDs reported installed by the TV; null until discovery succeeds.
+            installedIds: null,
             perfMode: localStorage.getItem('fmtv_perf_mode') || 'standard',
             tmdbKey: localStorage.getItem('fmtv_tmdb_key') || '',
             catalog: DEFAULT_CATALOG.slice(),
@@ -1272,6 +1391,15 @@
                 if (Object.prototype.hasOwnProperty.call(obj, key)) copy[key] = obj[key];
             }
             return copy;
+        }
+
+        // Formats an "HH:MM" wall-clock string in the viewer's chosen clock format.
+        function formatHM(hhmm) {
+            if (!hhmm || state.clockFormat !== '12h') return hhmm;
+            var parts = hhmm.split(':');
+            var h = parseInt(parts[0], 10);
+            var h12 = h % 12 || 12;
+            return h12 + ':' + parts[1] + ' ' + (h >= 12 ? 'PM' : 'AM');
         }
 
         function updateClock() {
@@ -1363,7 +1491,7 @@
         // synchronously and abort the rest of the boot sequence below it.
         function fetchWeather() {
             if (typeof fetch !== 'function') {
-                document.getElementById('weatherText').textContent = '22°C • Clear';
+                document.getElementById('weatherText').textContent = 'Weather unavailable';
                 document.getElementById('weatherSub').textContent = state.city || 'Offline Mode';
                 return;
             }
@@ -1387,32 +1515,33 @@
 
             geoPromise
                 .then(function() {
-                    // Auto-locate by IP if not set
+                    // Auto-locate by IP if not set. IP geolocation is often wrong or
+                    // rate-limited, so a result is only trusted when its timezone matches
+                    // the TV's own, and a second provider is tried before giving up.
                     if (!lat && !lon) {
-                        return fetch('https://ipapi.co/json/')
-                            .then(function(ipRes) { return ipRes.json(); })
-                            .then(function(ipData) {
-                                if (ipData.latitude && ipData.longitude) {
-                                    lat = ipData.latitude;
-                                    lon = ipData.longitude;
-                                    cityLabel = ipData.city || 'Local';
-                                }
-                            })
-                            .catch(function() {});
+                        return locateByIP('https://ipapi.co/json/', function(d) {
+                            return { lat: d.latitude, lon: d.longitude, city: d.city, tz: d.timezone };
+                        }).then(function(loc) {
+                            return loc || locateByIP('https://ipwho.is/', function(d) {
+                                return { lat: d.latitude, lon: d.longitude, city: d.city, tz: d.timezone && d.timezone.id };
+                            });
+                        }).then(function(loc) {
+                            if (loc) {
+                                lat = loc.lat;
+                                lon = loc.lon;
+                                cityLabel = loc.city || 'Local';
+                            }
+                        });
                     }
                 })
                 .then(function() {
-                    // Default to Sao Paulo coordinates if offline/blocked
-                    if (!lat && !lon) {
-                        lat = -23.55;
-                        lon = -46.63;
-                        cityLabel = cityLabel || 'São Paulo';
-                    }
+                    if (!lat && !lon) throw new Error('no location');
 
                     var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
                         '&current=temperature_2m,weather_code,is_day' +
                         '&hourly=temperature_2m,weather_code' +
-                        '&daily=sunrise,sunset&timezone=auto&forecast_days=2';
+                        '&daily=sunrise,sunset&timezone=auto&forecast_days=2' +
+                        (state.tempUnit === 'F' ? '&temperature_unit=fahrenheit' : '');
                     return fetch(url).then(function(res) { return res.json(); });
                 })
                 .then(function(data) {
@@ -1431,7 +1560,7 @@
                         var wmo = WMO_CODES[code] || ['⛅', 'Fair'];
 
                         document.getElementById('weatherIcon').textContent = isDay ? wmo[0] : '🌙';
-                        document.getElementById('weatherText').textContent = temp + '°C • ' + wmo[1];
+                        document.getElementById('weatherText').textContent = temp + '°' + state.tempUnit + ' • ' + wmo[1];
 
                         var sunsetStr = '';
                         if (data.daily) {
@@ -1440,7 +1569,7 @@
                             }
                             if (data.daily.sunset && data.daily.sunset[0]) {
                                 state.sunset = data.daily.sunset[0].split('T')[1];
-                                sunsetStr = ' • Sunset ' + state.sunset;
+                                sunsetStr = ' • Sunset ' + formatHM(state.sunset);
                                 var sunsetHour = parseInt(state.sunset.split(':')[0], 10);
                                 state.isSunset = Math.abs(localNow.getUTCHours() - sunsetHour) <= 1;
                             }
@@ -1468,9 +1597,25 @@
                     renderDrawerForecast();
                 })
                 .catch(function(err) {
-                    document.getElementById('weatherText').textContent = '22°C • Clear';
-                    document.getElementById('weatherSub').textContent = state.city || 'Offline Mode';
+                    document.getElementById('weatherText').textContent = 'Weather unavailable';
+                    document.getElementById('weatherSub').textContent = state.city || 'Set your city in Customize';
                 });
+        }
+
+        // Resolves to {lat, lon, city} from an IP geolocation service, or null when the
+        // lookup fails or lands in a different timezone than the TV (a wrong guess).
+        function locateByIP(url, normalize) {
+            var deviceTz = null;
+            try { deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) {}
+            return fetch(url)
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    var loc = normalize(data || {});
+                    if (!loc.lat || !loc.lon) return null;
+                    if (deviceTz && loc.tz && loc.tz !== deviceTz) return null;
+                    return loc;
+                })
+                .catch(function() { return null; });
         }
 
         // --- Live Trending Picks (TMDB + Live TVMaze Zero-Key Feed), split by Movies/Shows tab ---
@@ -1576,9 +1721,11 @@
 
         // --- Discover Installed Apps from LG webOS ---
         function addLaunchPoints(launchPoints) {
+            state.installedIds = state.installedIds || {};
             launchPoints.forEach(function(lp) {
                 var appId = lp.appId || lp.id;
                 if (!appId) return;
+                state.installedIds[appId] = true;
                 var exists = arrFind(state.catalog, function(c) { return c.id === appId; });
                 var iconUrl = launchPointIcon(lp);
                 if (exists && iconUrl) exists.iconUrl = iconUrl;
@@ -1753,6 +1900,8 @@
             var favItems = (shelfEdit || state.favorites)
                 .map(function(id) { return arrFind(state.catalog, function(c) { return c.id === id; }); })
                 .filter(Boolean)
+                // Built-in TV inputs (HDMI etc.) never appear in the app list, so they always stay.
+                .filter(function(app) { return !state.installedIds || state.installedIds[app.id] || /^com\.webos\.app\.(hdmi|externalinput)/.test(app.id); })
                 .slice(0, 8);
 
             favItems.forEach(function(app) {
@@ -1991,6 +2140,9 @@
             document.getElementById('cfgCity').value = state.city;
             document.getElementById('cfgTheme').value = state.theme;
             document.getElementById('cfgClockFormat').value = state.clockFormat;
+            document.getElementById('cfgTempUnit').value = state.tempUnit;
+            document.getElementById('cfgLofiScene').value = state.lofiScene;
+            document.getElementById('cfgLofiMusic').value = state.lofiMusic;
             document.getElementById('cfgPerfMode').value = state.perfMode;
             document.getElementById('cfgTmdbKey').value = state.tmdbKey;
 
@@ -2111,8 +2263,8 @@
             document.getElementById('drawerIcon').textContent = document.getElementById('weatherIcon').textContent;
             document.getElementById('drawerTemp').textContent = document.getElementById('weatherText').textContent;
             document.getElementById('drawerCityLabel').textContent = document.getElementById('weatherSub').textContent;
-            document.getElementById('drawerSunrise').textContent = state.sunrise || '--:--';
-            document.getElementById('drawerSunset').textContent = state.sunset || '--:--';
+            document.getElementById('drawerSunrise').textContent = formatHM(state.sunrise) || '--:--';
+            document.getElementById('drawerSunset').textContent = formatHM(state.sunset) || '--:--';
 
             var hourlyEl = document.getElementById('drawerHourly');
             hourlyEl.innerHTML = '';
@@ -2121,7 +2273,7 @@
                 var chip = document.createElement('div');
                 chip.className = 'drawer-hour-chip';
                 chip.innerHTML =
-                    '<div class="drawer-hour-time">' + h.hour + '</div>' +
+                    '<div class="drawer-hour-time">' + formatHM(h.hour) + '</div>' +
                     '<div class="drawer-hour-icon">' + wmo[0] + '</div>' +
                     '<div class="drawer-hour-temp">' + h.temp + '°</div>';
                 hourlyEl.appendChild(chip);
@@ -2195,7 +2347,10 @@
             renderHDMIOptions();
             document.getElementById('cfgCity').value = '';
             document.getElementById('cfgTheme').value = 'auto';
-            document.getElementById('cfgClockFormat').value = '24h';
+            document.getElementById('cfgClockFormat').value = IS_US_LOCALE ? '12h' : '24h';
+            document.getElementById('cfgTempUnit').value = IS_US_LOCALE ? 'F' : 'C';
+            document.getElementById('cfgLofiScene').value = 'on';
+            document.getElementById('cfgLofiMusic').value = 'on';
             document.getElementById('cfgPerfMode').value = 'standard';
             document.getElementById('cfgTmdbKey').value = '';
             renderAppSelectorGrid();
@@ -2210,6 +2365,9 @@
             state.city = document.getElementById('cfgCity').value.trim();
             state.theme = document.getElementById('cfgTheme').value;
             state.clockFormat = document.getElementById('cfgClockFormat').value;
+            state.tempUnit = document.getElementById('cfgTempUnit').value;
+            state.lofiScene = document.getElementById('cfgLofiScene').value;
+            state.lofiMusic = document.getElementById('cfgLofiMusic').value;
             state.perfMode = document.getElementById('cfgPerfMode').value;
             state.tmdbKey = document.getElementById('cfgTmdbKey').value.trim();
 
@@ -2217,10 +2375,14 @@
             localStorage.setItem('fmtv_city', state.city);
             localStorage.setItem('fmtv_theme', state.theme);
             localStorage.setItem('fmtv_clock_format', state.clockFormat);
+            localStorage.setItem('fmtv_temp_unit', state.tempUnit);
+            localStorage.setItem('fmtv_lofi_scene', state.lofiScene);
+            localStorage.setItem('fmtv_lofi_music', state.lofiMusic);
             localStorage.setItem('fmtv_perf_mode', state.perfMode);
             localStorage.setItem('fmtv_tmdb_key', state.tmdbKey);
 
             applyPerfMode();
+            applyLofi();
             renderAppsShelf();
             applyTheme();
             updateClock();
@@ -2319,7 +2481,263 @@
             }
         });
 
+        // --- Lofi Night Scene ---
+        // Stars are one element with many box-shadows and the skyline is generated SVG,
+        // so the whole scene costs a handful of DOM nodes on the TV's GPU.
+        function buildLofiScene() {
+            var seed = 7;
+            function rand() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+            var stars = [];
+            for (var i = 0; i < 90; i++) {
+                var alpha = (0.25 + rand() * 0.6).toFixed(2);
+                stars.push(Math.round(rand() * 1920) + 'px ' + Math.round(rand() * 560) + 'px 0 rgba(255, 248, 235, ' + alpha + ')');
+            }
+            document.getElementById('lofiStars').style.boxShadow = stars.join(', ');
+
+            var svg = '';
+            var layers = [
+                { color: '#151128', minH: 120, maxH: 300, minW: 60, maxW: 140, lit: 0.06 },
+                { color: '#0b0916', minH: 70, maxH: 230, minW: 80, maxW: 180, lit: 0.12 }
+            ];
+            layers.forEach(function(layer) {
+                var x = -20;
+                while (x < 1940) {
+                    var w = layer.minW + rand() * (layer.maxW - layer.minW);
+                    var h = layer.minH + rand() * (layer.maxH - layer.minH);
+                    var top = 500 - h;
+                    svg += '<rect x="' + x.toFixed(0) + '" y="' + top.toFixed(0) + '" width="' + w.toFixed(0) + '" height="' + h.toFixed(0) + '" fill="' + layer.color + '"/>';
+                    for (var wy = top + 16; wy < 480; wy += 22) {
+                        for (var wx = x + 10; wx < x + w - 12; wx += 18) {
+                            if (rand() < layer.lit) {
+                                var warm = rand() < 0.8 ? '255, 196, 120' : '170, 190, 255';
+                                svg += '<rect x="' + wx.toFixed(0) + '" y="' + wy.toFixed(0) + '" width="7" height="10" fill="rgba(' + warm + ', ' + (0.35 + rand() * 0.45).toFixed(2) + ')"/>';
+                            }
+                        }
+                    }
+                    x += w + rand() * 8;
+                }
+            });
+            document.getElementById('lofiCity').innerHTML = svg;
+        }
+
+        // --- Lofi Music ---
+        // Chill beats synthesized live with Web Audio: Rhodes-style chords with tape wobble,
+        // a soft bass, swung drums and vinyl crackle. No audio files or streams, so it works
+        // offline and plays only while this home screen is visible.
+        var lofiMusic = (function() {
+            var AudioCtx = window.AudioContext || window.webkitAudioContext;
+            var ctx = null, master = null, keysBus = null, drumBus = null, wobble = null, crackleGain = null;
+            var noiseBuffer = null, timer = null, running = false;
+            var step = 0, nextTime = 0;
+            var EIGHTH = 60 / 70 / 2;
+            // ii-V-I-vi in C: bass root + jazzy voicing, one bar each (MIDI note numbers)
+            var CHORDS = [
+                { bass: 38, notes: [53, 57, 60, 64] }, // Dm9
+                { bass: 43, notes: [53, 59, 64, 69] }, // G13
+                { bass: 36, notes: [52, 55, 59, 62] }, // Cmaj9
+                { bass: 45, notes: [55, 59, 60, 64] }  // Am9
+            ];
+            var MELODY = [72, 74, 76, 79, 81, 84];
+
+            function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+            function init() {
+                ctx = new AudioCtx();
+                var warmth = ctx.createBiquadFilter();
+                warmth.type = 'lowpass';
+                warmth.frequency.value = 2600;
+                var glue = ctx.createDynamicsCompressor();
+                master = ctx.createGain();
+                master.gain.value = 0;
+                master.connect(warmth);
+                warmth.connect(glue);
+                glue.connect(ctx.destination);
+
+                keysBus = ctx.createGain();
+                keysBus.gain.value = 0.55;
+                keysBus.connect(master);
+                drumBus = ctx.createGain();
+                drumBus.gain.value = 0.7;
+                drumBus.connect(master);
+
+                // Slow pitch wobble shared by every keys voice, like a worn cassette
+                wobble = ctx.createGain();
+                wobble.gain.value = 9;
+                var lfo = ctx.createOscillator();
+                lfo.frequency.value = 0.35;
+                lfo.connect(wobble);
+                lfo.start();
+
+                noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+                var data = noiseBuffer.getChannelData(0);
+                for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+                // Vinyl: faint hiss plus sparse pops, looped
+                var vinylBuffer = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+                var vinyl = vinylBuffer.getChannelData(0);
+                for (var j = 0; j < vinyl.length; j++) {
+                    vinyl[j] = (Math.random() * 2 - 1) * 0.04 + (Math.random() < 0.0004 ? (Math.random() * 2 - 1) * 0.9 : 0);
+                }
+                var crackle = ctx.createBufferSource();
+                crackle.buffer = vinylBuffer;
+                crackle.loop = true;
+                var crackleTone = ctx.createBiquadFilter();
+                crackleTone.type = 'bandpass';
+                crackleTone.frequency.value = 3000;
+                crackleGain = ctx.createGain();
+                crackleGain.gain.value = 0.35;
+                crackle.connect(crackleTone);
+                crackleTone.connect(crackleGain);
+                crackleGain.connect(master);
+                crackle.start();
+            }
+
+            function envelope(gainNode, t, peak, attack, length) {
+                gainNode.gain.setValueAtTime(0.0001, t);
+                gainNode.gain.exponentialRampToValueAtTime(peak, t + attack);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, t + length);
+            }
+
+            function keys(midi, t, length, peak) {
+                var body = ctx.createOscillator();
+                var bell = ctx.createOscillator();
+                var bellLevel = ctx.createGain();
+                var amp = ctx.createGain();
+                body.type = 'sine';
+                bell.type = 'triangle';
+                body.frequency.value = mtof(midi);
+                bell.frequency.value = mtof(midi) * 2;
+                bell.detune.value = 5;
+                bellLevel.gain.value = 0.15;
+                wobble.connect(body.detune);
+                wobble.connect(bell.detune);
+                body.connect(amp);
+                bell.connect(bellLevel);
+                bellLevel.connect(amp);
+                amp.connect(keysBus);
+                envelope(amp, t, peak, 0.04, length);
+                body.start(t);
+                bell.start(t);
+                body.stop(t + length + 0.1);
+                bell.stop(t + length + 0.1);
+            }
+
+            function bass(midi, t, length) {
+                var osc = ctx.createOscillator();
+                var amp = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = mtof(midi);
+                osc.connect(amp);
+                amp.connect(master);
+                envelope(amp, t, 0.32, 0.02, length);
+                osc.start(t);
+                osc.stop(t + length + 0.1);
+            }
+
+            function kick(t, peak) {
+                var osc = ctx.createOscillator();
+                var amp = ctx.createGain();
+                osc.frequency.setValueAtTime(110, t);
+                osc.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+                osc.connect(amp);
+                amp.connect(drumBus);
+                envelope(amp, t, peak, 0.005, 0.32);
+                osc.start(t);
+                osc.stop(t + 0.4);
+            }
+
+            function noiseHit(t, type, freq, peak, length) {
+                var src = ctx.createBufferSource();
+                var filter = ctx.createBiquadFilter();
+                var amp = ctx.createGain();
+                src.buffer = noiseBuffer;
+                filter.type = type;
+                filter.frequency.value = freq;
+                src.connect(filter);
+                filter.connect(amp);
+                amp.connect(drumBus);
+                envelope(amp, t, peak, 0.004, length);
+                src.start(t, Math.random() * 0.5);
+                src.stop(t + length + 0.05);
+            }
+
+            function scheduleStep(n, t) {
+                var beat = n % 8;
+                var chord = CHORDS[Math.floor(n / 8) % CHORDS.length];
+                if (beat === 0) {
+                    chord.notes.forEach(function(note, i) {
+                        keys(note, t + i * 0.025, EIGHTH * 7.5, 0.09);
+                    });
+                    bass(chord.bass, t, EIGHTH * 3);
+                }
+                if (beat === 5) bass(chord.bass + 7, t, EIGHTH * 2);
+                if (beat === 0) kick(t, 0.75);
+                if (beat === 5) kick(t, 0.5);
+                if (beat === 2 || beat === 6) noiseHit(t, 'bandpass', 1700, 0.22, 0.16);
+                if (Math.random() < 0.85) noiseHit(t, 'highpass', 7500, beat % 2 ? 0.04 : 0.07, 0.05);
+                if ((beat === 3 || beat === 7) && Math.random() < 0.35) {
+                    keys(MELODY[Math.floor(Math.random() * MELODY.length)], t, EIGHTH * 3, 0.06);
+                }
+            }
+
+            function pump() {
+                while (nextTime < ctx.currentTime + 0.3) {
+                    // Lazy swing: every off-beat eighth lands a little late
+                    scheduleStep(step, nextTime + (step % 2 ? EIGHTH * 0.2 : 0));
+                    nextTime += EIGHTH;
+                    step++;
+                }
+            }
+
+            function start() {
+                if (!AudioCtx || running) return;
+                try {
+                    if (!ctx) init();
+                    if (ctx.state === 'suspended') ctx.resume();
+                    running = true;
+                    nextTime = ctx.currentTime + 0.15;
+                    master.gain.cancelScheduledValues(ctx.currentTime);
+                    master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+                    master.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 2.5);
+                    timer = setInterval(pump, 60);
+                } catch (e) { running = false; }
+            }
+
+            function stop() {
+                if (!running) return;
+                running = false;
+                clearInterval(timer);
+                master.gain.cancelScheduledValues(ctx.currentTime);
+                master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+                master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+                setTimeout(function() { if (!running && ctx) ctx.suspend(); }, 500);
+            }
+
+            // Browsers may hold audio until the first user input; any remote press unlocks it.
+            function unlock() {
+                if (running && ctx && ctx.state === 'suspended') ctx.resume();
+            }
+
+            return { start: start, stop: stop, unlock: unlock };
+        })();
+
+        function applyLofi() {
+            document.body.classList.toggle('lofi-on', state.lofiScene === 'on');
+            if (state.lofiMusic === 'on' && !document.hidden) lofiMusic.start();
+            else lofiMusic.stop();
+        }
+
+        document.addEventListener('keydown', function() { lofiMusic.unlock(); }, true);
+        // Launching another app hides this page, so the music pauses and returns with it.
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) lofiMusic.stop();
+            else if (state.lofiMusic === 'on') lofiMusic.start();
+        });
+
         // --- Boot Sequence ---
+        buildLofiScene();
+        applyLofi();
         applyPerfMode();
         renderAppsShelf();
         renderPicks(FALLBACK_MOVIES);
