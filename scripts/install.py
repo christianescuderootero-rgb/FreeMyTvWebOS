@@ -11,6 +11,9 @@ import socket
 import urllib.request
 import subprocess
 import shutil
+import threading
+import queue
+import time
 
 # Windows' default console codepage can't encode the emoji in the success
 # message below; UTF-8 output works on every platform this script runs on.
@@ -55,11 +58,67 @@ def discover_lg_tv():
     sock.close()
     return None
 
-def install_app(tv_ip, passphrase=None):
+def package_is_stale():
+    """True when the package is missing or older than any file in app/."""
     if not os.path.exists(DIST_IPK):
-        print("[!] Package not found. Building first...")
+        return True
+    built_at = os.path.getmtime(DIST_IPK)
+    for root, _, files in os.walk(os.path.join(REPO_DIR, "app")):
+        for name in files:
+            if os.path.getmtime(os.path.join(root, name)) > built_at:
+                return True
+    return False
+
+def fetch_key(tv_ip, passphrase, raw_key, dec_key):
+    """Downloads the TV's SSH key from the Key Server and stores a decrypted copy."""
+    try:
+        from cryptography.hazmat.primitives import serialization
+    except ImportError:
+        print("[!] Missing Python package 'cryptography'. Install it with:")
+        print(f"    {sys.executable} -m pip install cryptography")
+        return False
+    if not passphrase:
+        passphrase = input(f"Enter the 6-character Passphrase shown in Developer Mode on TV ({tv_ip}): ").strip()
+
+    print(f"[*] Downloading authentication key from http://{tv_ip}:9991/webos_rsa ...")
+    try:
+        with urllib.request.urlopen(f"http://{tv_ip}:9991/webos_rsa", timeout=5) as resp:
+            key_data = resp.read()
+    except Exception as e:
+        print(f"[!] Failed to fetch key: {e}")
+        print("[!] Make sure 'Key Server' is toggled ON in the Developer Mode app on the TV.")
+        return False
+
+    try:
+        key = serialization.load_pem_private_key(key_data, password=passphrase.encode())
+    except (ValueError, TypeError):
+        print("[!] That passphrase didn't unlock the key. Check the 6 characters on the TV and try again.")
+        return False
+    fd = os.open(raw_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(key_data)
+    os.chmod(raw_key, 0o600)
+    unenc = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    # Private keys must be owner-only: other local users could otherwise read
+    # them, and OpenSSH refuses to use a key with group/other permissions.
+    fd = os.open(dec_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(unenc)
+    os.chmod(dec_key, 0o600)
+    print("[+] SSH Key saved & decrypted successfully.")
+    return True
+
+def install_app(tv_ip, passphrase=None):
+    if package_is_stale():
+        print("[*] Package missing or older than app/. Building first...")
         build_script = os.path.join(REPO_DIR, "scripts", "build.py")
-        subprocess.run(f"python {build_script}", shell=True)
+        if subprocess.run([sys.executable, build_script]).returncode != 0 or not os.path.exists(DIST_IPK):
+            print("[!] Build failed.")
+            return False
 
     ssh_dir = os.path.expanduser("~/.ssh")
     os.makedirs(ssh_dir, exist_ok=True)
@@ -67,38 +126,11 @@ def install_app(tv_ip, passphrase=None):
     dec_key = os.path.join(ssh_dir, "webos_tv_rsa_decrypted")
 
     # Download key from TV if not present
+    fresh_key = False
     if not os.path.exists(dec_key):
-        if not passphrase:
-            passphrase = input(f"Enter the 6-character Passphrase shown in Developer Mode on TV ({tv_ip}): ").strip()
-
-        print(f"[*] Downloading authentication key from http://{tv_ip}:9991/webos_rsa ...")
-        try:
-            with urllib.request.urlopen(f"http://{tv_ip}:9991/webos_rsa", timeout=5) as resp:
-                key_data = resp.read()
-                fd = os.open(raw_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, "wb") as f:
-                    f.write(key_data)
-                os.chmod(raw_key, 0o600)
-        except Exception as e:
-            print(f"[!] Failed to fetch key: {e}")
-            print("[!] Make sure 'Key Server' is toggled ON in the Developer Mode app on the TV.")
+        if not fetch_key(tv_ip, passphrase, raw_key, dec_key):
             return False
-
-        # Decrypt key
-        from cryptography.hazmat.primitives import serialization
-        key = serialization.load_pem_private_key(key_data, password=passphrase.encode())
-        unenc = key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-        # Private keys must be owner-only: other local users could otherwise read
-        # them, and OpenSSH refuses to use a key with group/other permissions.
-        fd = os.open(dec_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(unenc)
-        os.chmod(dec_key, 0o600)
-        print("[+] SSH Key saved & decrypted successfully.")
+        fresh_key = True
 
     print(f"[*] Uploading Free My TV to TV ({tv_ip})...")
     # List-form args (no shell=True) throughout: on Windows, shell=True runs
@@ -110,58 +142,88 @@ def install_app(tv_ip, passphrase=None):
     ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "HostKeyAlgorithms=+ssh-rsa", "-o", "PubkeyAcceptedKeyTypes=+ssh-rsa"]
     scp_args = ["scp", *ssh_opts, "-P", "9922", "-i", dec_key, DIST_IPK, f"prisoner@{tv_ip}:/media/developer/temp/app.ipk"]
     res = subprocess.run(scp_args)
+    if res.returncode != 0 and not fresh_key:
+        # A cached key stops working after Dev Mode is turned off and on again.
+        print("[*] Upload failed with the saved key; fetching a fresh one from the TV...")
+        if fetch_key(tv_ip, passphrase, raw_key, dec_key):
+            res = subprocess.run(scp_args)
     if res.returncode != 0:
-        print("[!] SCP upload failed.")
+        print("[!] SCP upload failed. Check that Developer Mode is ON and the TV is on the same network.")
         return False
 
-    # luna-send-pub silently prints nothing at all without a controlling TTY
-    # (ssh -tt), and dev/install streams ~15-20 progress replies before the
-    # final "installed" status, so a generous -n bound is needed. It's also
-    # capped with `timeout` because luna-send-pub keeps the SSH session open
-    # waiting for more replies even once the service stops sending any.
-    def run_luna(remote_cmd, force_pty=True):
-        tty_flags = ["-tt"] if force_pty else []
-        args = ["ssh", *tty_flags, *ssh_opts, "-p", "9922", "-i", dec_key, f"prisoner@{tv_ip}", remote_cmd]
-        res = subprocess.run(args, capture_output=True, text=True)
-        # Some TVs' sshd rejects forced PTY allocation outright ("PTY
-        # allocation request failed on channel 0"); ssh then continues the
-        # session without one, which starves luna-send-pub of output. Retry
-        # once without forcing a PTY so the command itself still goes through.
-        if force_pty and "PTY allocation request failed" in (res.stderr or ""):
-            print("[*] TV rejected forced PTY allocation; retrying without one...")
-            res = subprocess.run(["ssh", *ssh_opts, "-p", "9922", "-i", dec_key, f"prisoner@{tv_ip}", remote_cmd], capture_output=True, text=True)
-        return res
+    # luna-send-pub prints nothing in "-n" mode without a controlling TTY, and many
+    # TVs' sshd refuses to allocate one. Interactive mode ("-i") streams every reply
+    # over a plain pipe and exits when stdin closes - the way LG's own ares-install
+    # talks to the TV - so it works with or without a PTY on every platform.
+    def luna_call(uri, payload, verdict, timeout):
+        remote_cmd = f"luna-send-pub -i {uri} '{json.dumps(payload)}'"
+        args = ["ssh", *ssh_opts, "-p", "9922", "-i", dec_key, f"prisoner@{tv_ip}", remote_cmd]
+        proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        lines = queue.Queue()
 
-    def run_luna_timed(seconds, inner_cmd):
-        # BusyBox's timeout only learned the coreutils "timeout DURATION CMD" spelling
-        # in 1.30; before that it wanted "-t SECS", and older webOS builds ship the
-        # older applet, which tries to execute the duration as a program instead.
-        # Try the modern form first, then fall back on that complaint.
-        res = run_luna(f"timeout {seconds} {inner_cmd}")
-        blob = (res.stdout or "") + (res.stderr or "")
-        if "can't execute" in blob or "Unknown option" in blob or "invalid option" in blob:
-            print("[*] TV's timeout wants the older -t form; retrying...")
-            res = run_luna(f"timeout -t {seconds} {inner_cmd}")
-        return res
+        def pump():
+            for line in proc.stdout:
+                lines.put(line)
+            lines.put(None)
+        threading.Thread(target=pump, daemon=True).start()
+
+        replies, result = [], None
+        deadline = time.time() + timeout
+        try:
+            while result is None:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    break
+                try:
+                    line = lines.get(timeout=remaining)
+                except queue.Empty:
+                    break
+                if line is None:
+                    break
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                replies.append(line)
+                try:
+                    result = verdict(json.loads(line))
+                except ValueError:
+                    pass
+        finally:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        return result, replies, proc.stderr.read() if proc.stderr else ""
+
+    def install_verdict(reply):
+        state = str((reply.get("details") or {}).get("state", "")) or str(reply.get("statusValue", ""))
+        if reply.get("returnValue") is False or "FAILED" in state.upper():
+            return False
+        if "installed" in state.lower():
+            return True
+        return None
 
     print("[*] Installing package on TV...")
-    install_payload = json.dumps({"id": APP_ID, "ipkUrl": "/media/developer/temp/app.ipk", "subscribe": True})
-    install_res = run_luna_timed(45, f"luna-send-pub -n 30 luna://com.webos.appInstallService/dev/install '{install_payload}'")
-    install_out = install_res.stdout
-    if '"state":"installed"' not in install_out:
+    install_payload = {"id": APP_ID, "ipkUrl": "/media/developer/temp/app.ipk", "subscribe": True}
+    ok, replies, err = luna_call("luna://com.webos.appInstallService/dev/install", install_payload, install_verdict, 90)
+    if not ok:
         print("[!] Install did not reach the 'installed' state. Raw output:")
-        print(install_out or "(empty)")
-        if install_res.stderr:
-            print(install_res.stderr)
+        print("\n".join(replies) or "(empty)")
+        if err:
+            print(err)
         return False
 
     print("[*] Launching Free My TV...")
-    launch_payload = json.dumps({"id": APP_ID})
-    launch_remote_cmd = f"luna-send-pub -n 1 luna://com.webos.applicationManager/launch '{launch_payload}'"
-    launch_res = run_luna(launch_remote_cmd)
-    if '"returnValue":true' not in launch_res.stdout:
+    launched, replies, err = luna_call("luna://com.webos.applicationManager/launch", {"id": APP_ID},
+                                       lambda reply: reply.get("returnValue"), 15)
+    if not launched:
         print("[!] Install succeeded but launch failed. Raw output:")
-        print(launch_res.stdout or "(empty)")
+        print("\n".join(replies) or "(empty)")
         return False
 
     print("\n[+] SUCCESS! Free My TV is installed and running on your LG TV! Enjoy! 🎉")
@@ -176,4 +238,4 @@ if __name__ == "__main__":
         if not ip:
             ip = input("Enter TV IP Address (shown in Developer Mode app): ").strip()
 
-    install_app(ip, passphrase)
+    sys.exit(0 if install_app(ip, passphrase) else 1)

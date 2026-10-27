@@ -136,6 +136,11 @@ Description: A fast, ad-free 60fps home screen for LG webOS TVs.
                 rel_p = os.path.relpath(full_p, APP_DIR)
                 dest_p = f"/usr/palm/applications/{app_id}/{rel_p.replace(os.sep, '/')}"
                 tar.add(full_p, arcname=dest_p)
+        # The TV's installer expects package metadata alongside the app, as ares-package writes it.
+        pkg_info = json.dumps({"id": app_id, "version": version, "app": app_id}, indent=2).encode("utf-8")
+        ti = tarfile.TarInfo(name=f"usr/palm/packages/{app_id}/packageinfo.json")
+        ti.size = len(pkg_info)
+        tar.addfile(ti, io.BytesIO(pkg_info))
     data_bytes = data_buf.getvalue()
 
     # 3. debian-binary
