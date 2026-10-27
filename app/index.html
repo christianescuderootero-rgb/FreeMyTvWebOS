@@ -114,13 +114,13 @@
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
         }
 
-        /* Lofi Night Scene: darker sky, moon, rain, and a skyline drawn behind the UI */
+        /* Lofi Scene: a muted, rainy Osaka corner at night, drawn behind the UI */
         body.lofi-on {
-            background: linear-gradient(180deg, #06050d 0%, #0c0a1a 40%, #151027 72%, #07060c 100%);
+            background: linear-gradient(180deg, #0a0f11 0%, #141a19 60%, #0b0a08 100%);
         }
 
         body.lofi-on .ambient-glow {
-            opacity: 0.45;
+            opacity: 0.35;
         }
 
         .lofi-scene {
@@ -136,64 +136,49 @@
             display: block;
         }
 
-        .lofi-stars {
+        .lofi-street {
             position: absolute;
             top: 0;
             left: 0;
-            width: 2px;
-            height: 2px;
-            border-radius: 50%;
-            animation: lofi-twinkle 6s ease-in-out infinite alternate;
-        }
-
-        .lofi-moon {
-            position: absolute;
-            top: 13%;
-            left: 66%;
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 38% 35%, #fff4dc 0%, #f1d9b0 55%, #c9a97c 100%);
-            box-shadow: 0 0 60px 18px rgba(255, 214, 160, 0.16), 0 0 160px 60px rgba(160, 120, 255, 0.08);
-            opacity: 0.85;
-        }
-
-        .lofi-rain {
-            position: absolute;
-            top: -100px; right: 0; bottom: 0; left: 0;
-            background-image: repeating-linear-gradient(105deg, rgba(180, 190, 255, 0.07) 0px, rgba(180, 190, 255, 0.07) 1px, transparent 1px, transparent 18px);
-            animation: lofi-rain 0.9s linear infinite;
-            opacity: 0.55;
-        }
-
-        .lofi-city {
-            position: absolute;
-            left: 0;
-            bottom: 0;
             width: 100%;
-            height: 46%;
+            height: 100%;
+        }
+
+        .lofi-rain,
+        .lofi-rain-near {
+            position: absolute;
+            top: -200px; right: 0; bottom: 0; left: 0;
+            background-image: repeating-linear-gradient(97deg, rgba(215, 215, 205, 0.09) 0px, rgba(215, 215, 205, 0.09) 1px, transparent 1px, transparent 14px);
+            animation: lofi-rain 0.8s linear infinite;
+            opacity: 0.6;
+        }
+
+        .lofi-rain-near {
+            background-image: repeating-linear-gradient(96deg, rgba(225, 225, 215, 0.1) 0px, rgba(225, 225, 215, 0.1) 1px, transparent 1px, transparent 44px);
+            animation: lofi-rain-near 0.55s linear infinite;
+            opacity: 0.55;
         }
 
         .lofi-vignette {
             position: absolute;
             top: 0; right: 0; bottom: 0; left: 0;
-            background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.55) 100%);
-        }
-
-        @keyframes lofi-twinkle {
-            from { opacity: 0.45; }
-            to { opacity: 1; }
+            background: radial-gradient(ellipse at 50% 42%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.7) 100%);
         }
 
         @keyframes lofi-rain {
             from { transform: translate3d(0, 0, 0); }
-            to { transform: translate3d(-5px, 100px, 0); }
+            to { transform: translate3d(-3px, 120px, 0); }
         }
 
-        :root.perf-mode .lofi-stars,
-        body.perf-mode .lofi-stars,
+        @keyframes lofi-rain-near {
+            from { transform: translate3d(0, 0, 0); }
+            to { transform: translate3d(-6px, 200px, 0); }
+        }
+
         :root.perf-mode .lofi-rain,
-        body.perf-mode .lofi-rain {
+        body.perf-mode .lofi-rain,
+        :root.perf-mode .lofi-rain-near,
+        body.perf-mode .lofi-rain-near {
             animation: none;
         }
 
@@ -1015,10 +1000,9 @@
 </head>
 <body>
     <div class="lofi-scene" id="lofiScene" aria-hidden="true">
-        <div class="lofi-stars" id="lofiStars"></div>
-        <div class="lofi-moon"></div>
-        <svg class="lofi-city" id="lofiCity" viewBox="0 0 1920 500" preserveAspectRatio="none"></svg>
+        <svg class="lofi-street" id="lofiStreet" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice"></svg>
         <div class="lofi-rain"></div>
+        <div class="lofi-rain-near"></div>
         <div class="lofi-vignette"></div>
     </div>
     <div class="ambient-glow" id="ambientGlow"></div>
@@ -1138,16 +1122,16 @@
                         </select>
                     </div>
                     <div class="field-group">
-                        <label>Lofi Night Scene</label>
+                        <label>Lofi Scene</label>
                         <select class="field-input modal-nav" id="cfgLofiScene">
-                            <option value="on">On (Dark City & Rain)</option>
+                            <option value="on">On (Rainy Osaka Corner)</option>
                             <option value="off">Off</option>
                         </select>
                     </div>
                     <div class="field-group">
                         <label>Lofi Music</label>
                         <select class="field-input modal-nav" id="cfgLofiMusic">
-                            <option value="on">On (Chill Beats)</option>
+                            <option value="on">On (Rainy Chill Beats)</option>
                             <option value="off">Off</option>
                         </select>
                     </div>
@@ -2481,116 +2465,279 @@
             }
         });
 
-        // --- Lofi Night Scene ---
-        // Stars are one element with many box-shadows and the skyline is generated SVG,
-        // so the whole scene costs a handful of DOM nodes on the TV's GPU.
+        // --- Lofi Scene: Rainy Osaka Corner ---
+        // A muted, painterly back-street corner at night: weathered buildings, amber light
+        // pools, soft mint signs, a utility-pole streetlight and a railing in the foreground.
+        // It is one SVG drawn once at boot; only the rain layers animate.
         function buildLofiScene() {
-            var seed = 7;
+            var seed = 5;
             function rand() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
-
-            var stars = [];
-            for (var i = 0; i < 90; i++) {
-                var alpha = (0.25 + rand() * 0.6).toFixed(2);
-                stars.push(Math.round(rand() * 1920) + 'px ' + Math.round(rand() * 560) + 'px 0 rgba(255, 248, 235, ' + alpha + ')');
+            var STREET = 880;
+            var parts = [];
+            function rect(x, y, w, h, fill, extra) {
+                parts.push('<rect x="' + Math.round(x) + '" y="' + Math.round(y) + '" width="' + Math.round(w) + '" height="' + Math.round(h) + '" fill="' + fill + '"' + (extra || '') + '/>');
             }
-            document.getElementById('lofiStars').style.boxShadow = stars.join(', ');
-
-            var svg = '';
-            var layers = [
-                { color: '#151128', minH: 120, maxH: 300, minW: 60, maxW: 140, lit: 0.06 },
-                { color: '#0b0916', minH: 70, maxH: 230, minW: 80, maxW: 180, lit: 0.12 }
-            ];
-            layers.forEach(function(layer) {
-                var x = -20;
-                while (x < 1940) {
-                    var w = layer.minW + rand() * (layer.maxW - layer.minW);
-                    var h = layer.minH + rand() * (layer.maxH - layer.minH);
-                    var top = 500 - h;
-                    svg += '<rect x="' + x.toFixed(0) + '" y="' + top.toFixed(0) + '" width="' + w.toFixed(0) + '" height="' + h.toFixed(0) + '" fill="' + layer.color + '"/>';
-                    for (var wy = top + 16; wy < 480; wy += 22) {
-                        for (var wx = x + 10; wx < x + w - 12; wx += 18) {
-                            if (rand() < layer.lit) {
-                                var warm = rand() < 0.8 ? '255, 196, 120' : '170, 190, 255';
-                                svg += '<rect x="' + wx.toFixed(0) + '" y="' + wy.toFixed(0) + '" width="7" height="10" fill="rgba(' + warm + ', ' + (0.35 + rand() * 0.45).toFixed(2) + ')"/>';
-                            }
-                        }
-                    }
-                    x += w + rand() * 8;
+            function circle(cx, cy, r, fill, extra) {
+                parts.push('<circle cx="' + Math.round(cx) + '" cy="' + Math.round(cy) + '" r="' + Math.round(r) + '" fill="' + fill + '"' + (extra || '') + '/>');
+            }
+            function glyphs(x, y, text, size, fill, vertical) {
+                for (var i = 0; i < text.length; i++) {
+                    var gx = vertical ? x : x + i * size * 1.25;
+                    var gy = vertical ? y + i * size * 1.15 : y;
+                    parts.push('<text x="' + Math.round(gx) + '" y="' + Math.round(gy) + '" font-size="' + size + '" font-weight="700" text-anchor="middle" fill="' + fill + '">' + text.charAt(i) + '</text>');
                 }
+            }
+            function windowGrid(x0, x1, y0, y1, litChance) {
+                for (var wy = y0; wy < y1; wy += 120) {
+                    for (var wx = x0; wx < x1 - 70; wx += 130) {
+                        var r = rand();
+                        var fill = r < litChance ? 'rgba(214, 150, 82, ' + (0.22 + rand() * 0.25).toFixed(2) + ')' : (r < litChance + 0.1 ? 'rgba(110, 135, 130, 0.16)' : '#13140f');
+                        rect(wx, wy, 78, 66, fill);
+                        rect(wx - 4, wy + 66, 86, 6, '#1d1d17');
+                        if (rand() < 0.35) rect(wx + 84, wy + 20, 40, 28, '#34342c');
+                    }
+                }
+            }
+
+            var defs = '<filter id="lofiGlow" x="-60%" y="-60%" width="220%" height="220%">' +
+                '<feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>' +
+                '<filter id="lofiSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>' +
+                '<filter id="lofiSmear" x="-30%" y="-10%" width="160%" height="120%"><feGaussianBlur stdDeviation="10 4"/></filter>' +
+                '<linearGradient id="lofiSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a0f11"/><stop offset="1" stop-color="#171c1a"/></linearGradient>' +
+                '<linearGradient id="lofiRoad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2418"/><stop offset="1" stop-color="#0b0a08"/></linearGradient>' +
+                '<radialGradient id="lofiAmber"><stop offset="0" stop-color="#ffc47a" stop-opacity="0.6"/><stop offset="1" stop-color="#ffc47a" stop-opacity="0"/></radialGradient>' +
+                '<radialGradient id="lofiCool"><stop offset="0" stop-color="#dfe9ff" stop-opacity="0.5"/><stop offset="1" stop-color="#dfe9ff" stop-opacity="0"/></radialGradient>' +
+                '<radialGradient id="lofiWash" cx="0.2" cy="0.55" r="0.75"><stop offset="0" stop-color="#8a6436"/><stop offset="0.5" stop-color="#3a3020"/><stop offset="1" stop-color="#1c1a14"/></radialGradient>';
+
+            rect(0, 0, 1920, STREET, 'url(#lofiSky)');
+
+            // Trees on the left, dark against the sky
+            for (var t = 0; t < 22; t++) {
+                circle(rand() * 430, 120 + rand() * 620, 50 + rand() * 70, rand() < 0.7 ? '#0b100c' : '#121a14');
+            }
+
+            // Far right building, washed in lamplight
+            rect(1450, 60, 470, STREET - 60, 'url(#lofiWash)');
+            windowGrid(1560, 1920, 150, 700, 0.25);
+            rect(1690, 170, 120, 96, 'rgba(230, 156, 84, 0.55)', ' filter="url(#lofiGlow)"');
+            rect(1540, 450, 34, 20, '#ffe3ae', ' filter="url(#lofiGlow)"');
+            circle(1556, 500, 260, 'url(#lofiAmber)', ' filter="url(#lofiSoft)"');
+
+            // Rooftop clutter between the buildings: tanks, pipes, sheds
+            parts.push('<path d="M1060 ' + STREET + ' L1060 640 L1110 620 L1140 650 L1190 600 L1230 640 L1290 610 L1330 660 L1380 630 L1450 660 L1450 ' + STREET + ' Z" fill="#17150f"/>');
+            for (var c = 0; c < 9; c++) {
+                var cx = 1080 + rand() * 360;
+                var cy = 660 + rand() * 180;
+                if (rand() < 0.5) rect(cx, cy, 30 + rand() * 60, 20 + rand() * 40, rand() < 0.2 ? '#5a2a1c' : '#23211a');
+                else circle(cx, cy, 14 + rand() * 18, 'none', ' stroke="#2c2a22" stroke-width="6"');
+            }
+            rect(1250, 760, 22, 30, '#ffb064', ' filter="url(#lofiGlow)"');
+
+            // Main corner building: balconies, AC units and a shop on the ground floor
+            rect(470, 150, 590, STREET - 150, '#26251e');
+            rect(1040, 150, 60, STREET - 150, '#1a1915');
+            rect(450, 300, 630, 110, '#2f2d24');
+            for (var slat = 456; slat < 1076; slat += 16) rect(slat, 300, 4, 110, '#1f1e18');
+            rect(450, 292, 630, 10, '#3a382d');
+            windowGrid(510, 1040, 180, 290, 0.15);
+            windowGrid(510, 1040, 440, 560, 0.2);
+            rect(470, 610, 590, 14, '#1b1a15');
+            rect(600, 640, 300, 58, '#bfb398', ' opacity="0.85"');
+            glyphs(670, 683, '喫茶店', 38, '#9b3128', false);
+            rect(470, 710, 590, STREET - 710, '#11110e');
+            for (var sh = 480; sh < 860; sh += 12) rect(sh, 720, 3, STREET - 730, '#191914');
+            rect(890, 720, 70, STREET - 720, '#ffcf8c', ' opacity="0.82"');
+            rect(880, 702, 30, 14, '#ffe6b8', ' filter="url(#lofiGlow)"');
+            circle(925, 790, 300, 'url(#lofiAmber)', ' filter="url(#lofiSoft)"');
+
+            // Soft glowing signs: two mint vertical panels and a small red one
+            rect(410, 200, 64, 130, '#bff3d2', ' opacity="0.92" filter="url(#lofiGlow)"');
+            glyphs(442, 252, '旅館', 40, '#1f4a36', true);
+            rect(1480, 330, 60, 160, '#bff3d2', ' opacity="0.88" filter="url(#lofiGlow)"');
+            glyphs(1510, 380, '喫茶', 38, '#1f4a36', true);
+            rect(1105, 290, 44, 70, '#ff7a64', ' opacity="0.85" filter="url(#lofiGlow)"');
+            glyphs(1127, 337, '酒', 32, '#4a1610', true);
+
+            // Utility poles, streetlight and sagging power lines
+            rect(205, 0, 18, STREET, '#090a09');
+            rect(1160, 110, 16, STREET - 110, '#0b0b0a');
+            rect(1120, 112, 60, 8, '#0b0b0a');
+            rect(1110, 118, 26, 10, '#eef3ff', ' filter="url(#lofiGlow)"');
+            circle(1124, 140, 170, 'url(#lofiCool)', ' filter="url(#lofiSoft)"');
+            [40, 64, 90].forEach(function(y, i) {
+                parts.push('<path d="M214 ' + y + ' Q 690 ' + (y + 90 + i * 12) + ' 1168 ' + (y + 70) + ' Q 1560 ' + (y + 150) + ' 1940 ' + (y + 60) + '" stroke="#070808" stroke-width="' + (3 - i * 0.6) + '" fill="none"/>');
             });
-            document.getElementById('lofiCity').innerHTML = svg;
+
+            // Round red road sign on a thin post
+            rect(330, 560, 8, STREET - 560, '#0c0c0b');
+            circle(334, 560, 28, '#a8302a', ' opacity="0.9"');
+            rect(318, 556, 32, 8, '#e8ddd0', ' opacity="0.8"');
+
+            // Wet road with smeared amber and mint reflections
+            rect(0, STREET, 1920, 1080 - STREET, 'url(#lofiRoad)');
+            parts.push('<g filter="url(#lofiSmear)" opacity="0.65">');
+            rect(870, STREET + 4, 110, 200, 'rgba(255, 196, 120, 0.55)');
+            rect(1500, STREET + 4, 160, 200, 'rgba(255, 190, 110, 0.4)');
+            rect(400, STREET + 4, 80, 200, 'rgba(190, 243, 210, 0.22)');
+            rect(1100, STREET + 4, 50, 200, 'rgba(230, 238, 255, 0.2)');
+            parts.push('</g>');
+
+            // Foreground railing rising to the right, with bushes in the corners
+            parts.push('<path d="M-10 968 L1930 902" stroke="#060706" stroke-width="8"/>');
+            parts.push('<path d="M-10 1022 L1930 962" stroke="#060706" stroke-width="5"/>');
+            for (var px = 60; px < 1920; px += 270) {
+                var railY = 968 - (px + 10) * (66 / 1940);
+                rect(px, railY, 9, 1080 - railY, '#060706');
+            }
+            for (var b = 0; b < 12; b++) {
+                circle(-40 + rand() * 300, 1000 + rand() * 90, 50 + rand() * 40, '#070a08');
+                circle(1700 + rand() * 260, 990 + rand() * 90, 50 + rand() * 40, '#070a08');
+            }
+
+            document.getElementById('lofiStreet').innerHTML = '<defs>' + defs + '</defs>' + parts.join('');
         }
 
         // --- Lofi Music ---
-        // Chill beats synthesized live with Web Audio: Rhodes-style chords with tape wobble,
-        // a soft bass, swung drums and vinyl crackle. No audio files or streams, so it works
-        // offline and plays only while this home screen is visible.
+        // Rainy-night lofi hip hop synthesized live with Web Audio: dusty piano and a soft pad
+        // over the "royal road" progression (IVmaj7-V7-iii7-vi, a Japanese pop staple),
+        // boom-bap drums, tape warmth, reverb, steady rain, window taps, vinyl crackle and distant thunder.
+        // No audio files or streams, so it works offline; it plays only while this screen is visible.
         var lofiMusic = (function() {
             var AudioCtx = window.AudioContext || window.webkitAudioContext;
-            var ctx = null, master = null, keysBus = null, drumBus = null, wobble = null, crackleGain = null;
-            var noiseBuffer = null, timer = null, running = false;
-            var step = 0, nextTime = 0;
-            var EIGHTH = 60 / 70 / 2;
-            // ii-V-I-vi in C: bass root + jazzy voicing, one bar each (MIDI note numbers)
+            var ctx = null, master = null, keysBus = null, padBus = null, drumBus = null, ambience = null;
+            var wobble = null, noiseBuffer = null, timer = null, running = false;
+            var step = 0, nextTime = 0, thunderAt = 0;
+            var EIGHTH = 60 / 78 / 2;
             var CHORDS = [
-                { bass: 38, notes: [53, 57, 60, 64] }, // Dm9
+                { bass: 41, notes: [57, 60, 64, 67] }, // Fmaj9
                 { bass: 43, notes: [53, 59, 64, 69] }, // G13
-                { bass: 36, notes: [52, 55, 59, 62] }, // Cmaj9
-                { bass: 45, notes: [55, 59, 60, 64] }  // Am9
+                { bass: 40, notes: [55, 59, 62, 66] }, // Em9
+                { bass: 45, notes: [55, 60, 64, 71] }, // Am9
+                { bass: 38, notes: [53, 57, 60, 64] }, // Dm9
+                { bass: 43, notes: [53, 59, 63, 68] }, // G7(b9 b13)
+                { bass: 40, notes: [55, 59, 62, 67] }, // Em7
+                { bass: 45, notes: [55, 61, 65, 69] }  // A7(b13)
             ];
-            var MELODY = [72, 74, 76, 79, 81, 84];
+            var MELODY = [69, 72, 74, 76, 79, 81]; // A minor pentatonic
 
             function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
+            function loopedNoise(seconds, shape) {
+                var buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+                var data = buffer.getChannelData(0);
+                for (var i = 0; i < data.length; i++) data[i] = shape();
+                return buffer;
+            }
+
             function init() {
                 ctx = new AudioCtx();
-                var warmth = ctx.createBiquadFilter();
-                warmth.type = 'lowpass';
-                warmth.frequency.value = 2600;
+                // Muffled top end, like music heard through a rainy window
+                var window_ = ctx.createBiquadFilter();
+                window_.type = 'lowpass';
+                window_.frequency.value = 2000;
                 var glue = ctx.createDynamicsCompressor();
+                // Gentle tape saturation for warmth
+                var tape = ctx.createWaveShaper();
+                var curve = new Float32Array(1024);
+                for (var k = 0; k < curve.length; k++) {
+                    var xk = k / (curve.length - 1) * 2 - 1;
+                    curve[k] = Math.tanh(1.6 * xk) / Math.tanh(1.6);
+                }
+                tape.curve = curve;
                 master = ctx.createGain();
                 master.gain.value = 0;
-                master.connect(warmth);
-                warmth.connect(glue);
+                master.connect(tape);
+                tape.connect(window_);
+                window_.connect(glue);
                 glue.connect(ctx.destination);
 
-                keysBus = ctx.createGain();
-                keysBus.gain.value = 0.55;
-                keysBus.connect(master);
-                drumBus = ctx.createGain();
-                drumBus.gain.value = 0.7;
-                drumBus.connect(master);
+                // Generated room reverb: decaying stereo noise as the impulse response
+                var verb = ctx.createConvolver();
+                var irLength = Math.floor(ctx.sampleRate * 3);
+                var ir = ctx.createBuffer(2, irLength, ctx.sampleRate);
+                for (var ch = 0; ch < 2; ch++) {
+                    var irData = ir.getChannelData(ch);
+                    for (var i = 0; i < irLength; i++) irData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLength, 3);
+                }
+                verb.buffer = ir;
+                var verbSend = ctx.createGain();
+                verbSend.gain.value = 0.32;
+                verbSend.connect(verb);
+                verb.connect(master);
 
-                // Slow pitch wobble shared by every keys voice, like a worn cassette
+                keysBus = ctx.createGain();
+                keysBus.gain.value = 0.6;
+                keysBus.connect(master);
+                keysBus.connect(verbSend);
+                padBus = ctx.createGain();
+                padBus.gain.value = 0.5;
+                var padTone = ctx.createBiquadFilter();
+                padTone.type = 'lowpass';
+                padTone.frequency.value = 900;
+                padBus.connect(padTone);
+                padTone.connect(master);
+                padTone.connect(verbSend);
+                drumBus = ctx.createGain();
+                drumBus.gain.value = 0.6;
+                drumBus.connect(master);
+                ambience = ctx.createGain();
+                ambience.gain.value = 1;
+                ambience.connect(master);
+
+                // Slow pitch wobble shared by the piano, like a worn cassette
                 wobble = ctx.createGain();
-                wobble.gain.value = 9;
+                wobble.gain.value = 7;
                 var lfo = ctx.createOscillator();
-                lfo.frequency.value = 0.35;
+                lfo.frequency.value = 0.3;
                 lfo.connect(wobble);
                 lfo.start();
 
-                noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-                var data = noiseBuffer.getChannelData(0);
-                for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+                noiseBuffer = loopedNoise(1, function() { return Math.random() * 2 - 1; });
 
-                // Vinyl: faint hiss plus sparse pops, looped
-                var vinylBuffer = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-                var vinyl = vinylBuffer.getChannelData(0);
-                for (var j = 0; j < vinyl.length; j++) {
-                    vinyl[j] = (Math.random() * 2 - 1) * 0.04 + (Math.random() < 0.0004 ? (Math.random() * 2 - 1) * 0.9 : 0);
-                }
+                // Steady rain: a bright hiss layer plus a softer low patter, gently swelling
+                [[500, 6000, 0.1], [150, 900, 0.16]].forEach(function(band) {
+                    var rain = ctx.createBufferSource();
+                    rain.buffer = loopedNoise(4, function() { return Math.random() * 2 - 1; });
+                    rain.loop = true;
+                    var hp = ctx.createBiquadFilter();
+                    hp.type = 'highpass';
+                    hp.frequency.value = band[0];
+                    var lp = ctx.createBiquadFilter();
+                    lp.type = 'lowpass';
+                    lp.frequency.value = band[1];
+                    var level = ctx.createGain();
+                    level.gain.value = band[2];
+                    var swell = ctx.createOscillator();
+                    var swellDepth = ctx.createGain();
+                    swell.frequency.value = 0.04 + Math.random() * 0.03;
+                    swellDepth.gain.value = band[2] * 0.35;
+                    swell.connect(swellDepth);
+                    swellDepth.connect(level.gain);
+                    rain.connect(hp);
+                    hp.connect(lp);
+                    lp.connect(level);
+                    level.connect(ambience);
+                    swell.start();
+                    rain.start();
+                });
+
+                // Vinyl: faint hiss with sparse pops
                 var crackle = ctx.createBufferSource();
-                crackle.buffer = vinylBuffer;
+                crackle.buffer = loopedNoise(3, function() {
+                    return (Math.random() * 2 - 1) * 0.03 + (Math.random() < 0.0003 ? (Math.random() * 2 - 1) * 0.8 : 0);
+                });
                 crackle.loop = true;
                 var crackleTone = ctx.createBiquadFilter();
                 crackleTone.type = 'bandpass';
                 crackleTone.frequency.value = 3000;
-                crackleGain = ctx.createGain();
-                crackleGain.gain.value = 0.35;
+                var crackleLevel = ctx.createGain();
+                crackleLevel.gain.value = 0.22;
                 crackle.connect(crackleTone);
-                crackleTone.connect(crackleGain);
-                crackleGain.connect(master);
+                crackleTone.connect(crackleLevel);
+                crackleLevel.connect(ambience);
                 crackle.start();
+
+                thunderAt = ctx.currentTime + 40 + Math.random() * 60;
             }
 
             function envelope(gainNode, t, peak, attack, length) {
@@ -2599,28 +2746,41 @@
                 gainNode.gain.exponentialRampToValueAtTime(0.0001, t + length);
             }
 
-            function keys(midi, t, length, peak) {
-                var body = ctx.createOscillator();
-                var bell = ctx.createOscillator();
-                var bellLevel = ctx.createGain();
+            function piano(midi, t, length, peak) {
                 var amp = ctx.createGain();
-                body.type = 'sine';
-                bell.type = 'triangle';
-                body.frequency.value = mtof(midi);
-                bell.frequency.value = mtof(midi) * 2;
-                bell.detune.value = 5;
-                bellLevel.gain.value = 0.15;
-                wobble.connect(body.detune);
-                wobble.connect(bell.detune);
-                body.connect(amp);
-                bell.connect(bellLevel);
-                bellLevel.connect(amp);
                 amp.connect(keysBus);
-                envelope(amp, t, peak, 0.04, length);
-                body.start(t);
-                bell.start(t);
-                body.stop(t + length + 0.1);
-                bell.stop(t + length + 0.1);
+                [[1, 'sine', 1], [2, 'triangle', 0.18], [3, 'sine', 0.06]].forEach(function(partial) {
+                    var osc = ctx.createOscillator();
+                    var level = ctx.createGain();
+                    osc.type = partial[1];
+                    osc.frequency.value = mtof(midi) * partial[0];
+                    level.gain.value = partial[2];
+                    wobble.connect(osc.detune);
+                    osc.connect(level);
+                    level.connect(amp);
+                    osc.start(t);
+                    osc.stop(t + length + 0.1);
+                });
+                envelope(amp, t, peak, 0.008, length);
+            }
+
+            function pad(notes, t, length) {
+                notes.forEach(function(note) {
+                    [-7, 7].forEach(function(cents) {
+                        var osc = ctx.createOscillator();
+                        var amp = ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.value = mtof(note);
+                        osc.detune.value = cents;
+                        osc.connect(amp);
+                        amp.connect(padBus);
+                        amp.gain.setValueAtTime(0.0001, t);
+                        amp.gain.linearRampToValueAtTime(0.006, t + 1.4);
+                        amp.gain.linearRampToValueAtTime(0.0001, t + length);
+                        osc.start(t);
+                        osc.stop(t + length + 0.1);
+                    });
+                });
             }
 
             function bass(midi, t, length) {
@@ -2630,7 +2790,7 @@
                 osc.frequency.value = mtof(midi);
                 osc.connect(amp);
                 amp.connect(master);
-                envelope(amp, t, 0.32, 0.02, length);
+                envelope(amp, t, 0.3, 0.02, length);
                 osc.start(t);
                 osc.stop(t + length + 0.1);
             }
@@ -2638,16 +2798,16 @@
             function kick(t, peak) {
                 var osc = ctx.createOscillator();
                 var amp = ctx.createGain();
-                osc.frequency.setValueAtTime(110, t);
-                osc.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+                osc.frequency.setValueAtTime(100, t);
+                osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
                 osc.connect(amp);
                 amp.connect(drumBus);
-                envelope(amp, t, peak, 0.005, 0.32);
+                envelope(amp, t, peak, 0.006, 0.35);
                 osc.start(t);
-                osc.stop(t + 0.4);
+                osc.stop(t + 0.45);
             }
 
-            function noiseHit(t, type, freq, peak, length) {
+            function noiseHit(t, type, freq, peak, length, dest) {
                 var src = ctx.createBufferSource();
                 var filter = ctx.createBiquadFilter();
                 var amp = ctx.createGain();
@@ -2656,10 +2816,52 @@
                 filter.frequency.value = freq;
                 src.connect(filter);
                 filter.connect(amp);
-                amp.connect(drumBus);
+                amp.connect(dest || drumBus);
                 envelope(amp, t, peak, 0.004, length);
                 src.start(t, Math.random() * 0.5);
                 src.stop(t + length + 0.05);
+            }
+
+            function snareBody(t) {
+                var osc = ctx.createOscillator();
+                var amp = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(190, t);
+                osc.frequency.exponentialRampToValueAtTime(120, t + 0.1);
+                osc.connect(amp);
+                amp.connect(drumBus);
+                envelope(amp, t, 0.18, 0.003, 0.12);
+                osc.start(t);
+                osc.stop(t + 0.15);
+            }
+
+            function windowTap(t) {
+                var osc = ctx.createOscillator();
+                var amp = ctx.createGain();
+                osc.frequency.value = 2200 + Math.random() * 2200;
+                osc.connect(amp);
+                amp.connect(ambience);
+                envelope(amp, t, 0.012 + Math.random() * 0.01, 0.002, 0.04);
+                osc.start(t);
+                osc.stop(t + 0.06);
+            }
+
+            function thunder(t) {
+                var src = ctx.createBufferSource();
+                var rumble = ctx.createBiquadFilter();
+                var amp = ctx.createGain();
+                src.buffer = noiseBuffer;
+                src.loop = true;
+                rumble.type = 'lowpass';
+                rumble.frequency.value = 110;
+                src.connect(rumble);
+                rumble.connect(amp);
+                amp.connect(ambience);
+                amp.gain.setValueAtTime(0.0001, t);
+                amp.gain.exponentialRampToValueAtTime(0.9, t + 1.6);
+                amp.gain.exponentialRampToValueAtTime(0.0001, t + 8);
+                src.start(t);
+                src.stop(t + 8.2);
             }
 
             function scheduleStep(n, t) {
@@ -2667,17 +2869,27 @@
                 var chord = CHORDS[Math.floor(n / 8) % CHORDS.length];
                 if (beat === 0) {
                     chord.notes.forEach(function(note, i) {
-                        keys(note, t + i * 0.025, EIGHTH * 7.5, 0.09);
+                        piano(note, t + i * 0.03, EIGHTH * 7, 0.085);
                     });
-                    bass(chord.bass, t, EIGHTH * 3);
+                    pad(chord.notes, t, EIGHTH * 8);
+                    bass(chord.bass, t, EIGHTH * 3.5);
+                    kick(t, 0.8);
                 }
-                if (beat === 5) bass(chord.bass + 7, t, EIGHTH * 2);
-                if (beat === 0) kick(t, 0.75);
-                if (beat === 5) kick(t, 0.5);
-                if (beat === 2 || beat === 6) noiseHit(t, 'bandpass', 1700, 0.22, 0.16);
-                if (Math.random() < 0.85) noiseHit(t, 'highpass', 7500, beat % 2 ? 0.04 : 0.07, 0.05);
-                if ((beat === 3 || beat === 7) && Math.random() < 0.35) {
-                    keys(MELODY[Math.floor(Math.random() * MELODY.length)], t, EIGHTH * 3, 0.06);
+                // Boom-bap: a second kick on the "and" of two, snare with a woody body on 2 and 4
+                if (beat === 3) kick(t, 0.55);
+                if (beat === 5) bass(chord.bass + 12, t, EIGHTH * 1.5);
+                if (beat === 2 || beat === 6) {
+                    noiseHit(t, 'bandpass', 1800, 0.2, 0.2);
+                    snareBody(t);
+                }
+                if (Math.random() < 0.75) noiseHit(t, 'highpass', 8000, beat % 2 ? 0.02 : 0.035, 0.05);
+                if ((beat === 3 || beat === 7) && Math.random() < 0.3) {
+                    piano(MELODY[Math.floor(Math.random() * MELODY.length)], t, EIGHTH * 5, 0.05);
+                }
+                if (Math.random() < 0.3) windowTap(t + Math.random() * EIGHTH);
+                if (t > thunderAt) {
+                    thunder(t);
+                    thunderAt = t + 70 + Math.random() * 90;
                 }
             }
 
@@ -2699,7 +2911,7 @@
                     nextTime = ctx.currentTime + 0.15;
                     master.gain.cancelScheduledValues(ctx.currentTime);
                     master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-                    master.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 2.5);
+                    master.gain.linearRampToValueAtTime(0.24, ctx.currentTime + 3);
                     timer = setInterval(pump, 60);
                 } catch (e) { running = false; }
             }
