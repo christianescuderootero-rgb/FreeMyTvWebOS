@@ -2598,146 +2598,75 @@
         }
 
         // --- Lofi Music ---
-        // Rainy-night lofi hip hop synthesized live with Web Audio: dusty piano and a soft pad
-        // over the "royal road" progression (IVmaj7-V7-iii7-vi, a Japanese pop staple),
-        // boom-bap drums, tape warmth, reverb, steady rain, window taps, vinyl crackle and distant thunder.
-        // No audio files or streams, so it works offline; it plays only while this screen is visible.
+        // Chill beats synthesized live with Web Audio: Rhodes-style chords with tape wobble,
+        // a soft bass, swung drums and vinyl crackle. No audio files or streams, so it works
+        // offline and plays only while this home screen is visible.
         var lofiMusic = (function() {
             var AudioCtx = window.AudioContext || window.webkitAudioContext;
-            var ctx = null, master = null, keysBus = null, padBus = null, drumBus = null, ambience = null;
-            var wobble = null, noiseBuffer = null, timer = null, running = false;
-            var step = 0, nextTime = 0, thunderAt = 0;
-            var EIGHTH = 60 / 78 / 2;
+            var ctx = null, master = null, keysBus = null, drumBus = null, wobble = null, crackleGain = null;
+            var noiseBuffer = null, timer = null, running = false;
+            var step = 0, nextTime = 0;
+            var EIGHTH = 60 / 70 / 2;
+            // ii-V-I-vi in C: bass root + jazzy voicing, one bar each (MIDI note numbers)
             var CHORDS = [
-                { bass: 41, notes: [57, 60, 64, 67] }, // Fmaj9
-                { bass: 43, notes: [53, 59, 64, 69] }, // G13
-                { bass: 40, notes: [55, 59, 62, 66] }, // Em9
-                { bass: 45, notes: [55, 60, 64, 71] }, // Am9
                 { bass: 38, notes: [53, 57, 60, 64] }, // Dm9
-                { bass: 43, notes: [53, 59, 63, 68] }, // G7(b9 b13)
-                { bass: 40, notes: [55, 59, 62, 67] }, // Em7
-                { bass: 45, notes: [55, 61, 65, 69] }  // A7(b13)
+                { bass: 43, notes: [53, 59, 64, 69] }, // G13
+                { bass: 36, notes: [52, 55, 59, 62] }, // Cmaj9
+                { bass: 45, notes: [55, 59, 60, 64] }  // Am9
             ];
-            var MELODY = [69, 72, 74, 76, 79, 81]; // A minor pentatonic
+            var MELODY = [72, 74, 76, 79, 81, 84];
 
             function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
-            function loopedNoise(seconds, shape) {
-                var buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
-                var data = buffer.getChannelData(0);
-                for (var i = 0; i < data.length; i++) data[i] = shape();
-                return buffer;
-            }
-
             function init() {
                 ctx = new AudioCtx();
-                // Muffled top end, like music heard through a rainy window
-                var window_ = ctx.createBiquadFilter();
-                window_.type = 'lowpass';
-                window_.frequency.value = 2000;
+                var warmth = ctx.createBiquadFilter();
+                warmth.type = 'lowpass';
+                warmth.frequency.value = 2600;
                 var glue = ctx.createDynamicsCompressor();
-                // Gentle tape saturation for warmth
-                var tape = ctx.createWaveShaper();
-                var curve = new Float32Array(1024);
-                for (var k = 0; k < curve.length; k++) {
-                    var xk = k / (curve.length - 1) * 2 - 1;
-                    curve[k] = Math.tanh(1.6 * xk) / Math.tanh(1.6);
-                }
-                tape.curve = curve;
                 master = ctx.createGain();
                 master.gain.value = 0;
-                master.connect(tape);
-                tape.connect(window_);
-                window_.connect(glue);
+                master.connect(warmth);
+                warmth.connect(glue);
                 glue.connect(ctx.destination);
 
-                // Generated room reverb: decaying stereo noise as the impulse response
-                var verb = ctx.createConvolver();
-                var irLength = Math.floor(ctx.sampleRate * 3);
-                var ir = ctx.createBuffer(2, irLength, ctx.sampleRate);
-                for (var ch = 0; ch < 2; ch++) {
-                    var irData = ir.getChannelData(ch);
-                    for (var i = 0; i < irLength; i++) irData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLength, 3);
-                }
-                verb.buffer = ir;
-                var verbSend = ctx.createGain();
-                verbSend.gain.value = 0.32;
-                verbSend.connect(verb);
-                verb.connect(master);
-
                 keysBus = ctx.createGain();
-                keysBus.gain.value = 0.6;
+                keysBus.gain.value = 0.55;
                 keysBus.connect(master);
-                keysBus.connect(verbSend);
-                padBus = ctx.createGain();
-                padBus.gain.value = 0.5;
-                var padTone = ctx.createBiquadFilter();
-                padTone.type = 'lowpass';
-                padTone.frequency.value = 900;
-                padBus.connect(padTone);
-                padTone.connect(master);
-                padTone.connect(verbSend);
                 drumBus = ctx.createGain();
-                drumBus.gain.value = 0.6;
+                drumBus.gain.value = 0.7;
                 drumBus.connect(master);
-                ambience = ctx.createGain();
-                ambience.gain.value = 1;
-                ambience.connect(master);
 
-                // Slow pitch wobble shared by the piano, like a worn cassette
+                // Slow pitch wobble shared by every keys voice, like a worn cassette
                 wobble = ctx.createGain();
-                wobble.gain.value = 7;
+                wobble.gain.value = 9;
                 var lfo = ctx.createOscillator();
-                lfo.frequency.value = 0.3;
+                lfo.frequency.value = 0.35;
                 lfo.connect(wobble);
                 lfo.start();
 
-                noiseBuffer = loopedNoise(1, function() { return Math.random() * 2 - 1; });
+                noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+                var data = noiseBuffer.getChannelData(0);
+                for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
 
-                // Steady rain: a bright hiss layer plus a softer low patter, gently swelling
-                [[500, 6000, 0.1], [150, 900, 0.16]].forEach(function(band) {
-                    var rain = ctx.createBufferSource();
-                    rain.buffer = loopedNoise(4, function() { return Math.random() * 2 - 1; });
-                    rain.loop = true;
-                    var hp = ctx.createBiquadFilter();
-                    hp.type = 'highpass';
-                    hp.frequency.value = band[0];
-                    var lp = ctx.createBiquadFilter();
-                    lp.type = 'lowpass';
-                    lp.frequency.value = band[1];
-                    var level = ctx.createGain();
-                    level.gain.value = band[2];
-                    var swell = ctx.createOscillator();
-                    var swellDepth = ctx.createGain();
-                    swell.frequency.value = 0.04 + Math.random() * 0.03;
-                    swellDepth.gain.value = band[2] * 0.35;
-                    swell.connect(swellDepth);
-                    swellDepth.connect(level.gain);
-                    rain.connect(hp);
-                    hp.connect(lp);
-                    lp.connect(level);
-                    level.connect(ambience);
-                    swell.start();
-                    rain.start();
-                });
-
-                // Vinyl: faint hiss with sparse pops
+                // Vinyl: faint hiss plus sparse pops, looped
+                var vinylBuffer = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+                var vinyl = vinylBuffer.getChannelData(0);
+                for (var j = 0; j < vinyl.length; j++) {
+                    vinyl[j] = (Math.random() * 2 - 1) * 0.04 + (Math.random() < 0.0004 ? (Math.random() * 2 - 1) * 0.9 : 0);
+                }
                 var crackle = ctx.createBufferSource();
-                crackle.buffer = loopedNoise(3, function() {
-                    return (Math.random() * 2 - 1) * 0.03 + (Math.random() < 0.0003 ? (Math.random() * 2 - 1) * 0.8 : 0);
-                });
+                crackle.buffer = vinylBuffer;
                 crackle.loop = true;
                 var crackleTone = ctx.createBiquadFilter();
                 crackleTone.type = 'bandpass';
                 crackleTone.frequency.value = 3000;
-                var crackleLevel = ctx.createGain();
-                crackleLevel.gain.value = 0.22;
+                crackleGain = ctx.createGain();
+                crackleGain.gain.value = 0.35;
                 crackle.connect(crackleTone);
-                crackleTone.connect(crackleLevel);
-                crackleLevel.connect(ambience);
+                crackleTone.connect(crackleGain);
+                crackleGain.connect(master);
                 crackle.start();
-
-                thunderAt = ctx.currentTime + 40 + Math.random() * 60;
             }
 
             function envelope(gainNode, t, peak, attack, length) {
@@ -2746,41 +2675,28 @@
                 gainNode.gain.exponentialRampToValueAtTime(0.0001, t + length);
             }
 
-            function piano(midi, t, length, peak) {
+            function keys(midi, t, length, peak) {
+                var body = ctx.createOscillator();
+                var bell = ctx.createOscillator();
+                var bellLevel = ctx.createGain();
                 var amp = ctx.createGain();
+                body.type = 'sine';
+                bell.type = 'triangle';
+                body.frequency.value = mtof(midi);
+                bell.frequency.value = mtof(midi) * 2;
+                bell.detune.value = 5;
+                bellLevel.gain.value = 0.15;
+                wobble.connect(body.detune);
+                wobble.connect(bell.detune);
+                body.connect(amp);
+                bell.connect(bellLevel);
+                bellLevel.connect(amp);
                 amp.connect(keysBus);
-                [[1, 'sine', 1], [2, 'triangle', 0.18], [3, 'sine', 0.06]].forEach(function(partial) {
-                    var osc = ctx.createOscillator();
-                    var level = ctx.createGain();
-                    osc.type = partial[1];
-                    osc.frequency.value = mtof(midi) * partial[0];
-                    level.gain.value = partial[2];
-                    wobble.connect(osc.detune);
-                    osc.connect(level);
-                    level.connect(amp);
-                    osc.start(t);
-                    osc.stop(t + length + 0.1);
-                });
-                envelope(amp, t, peak, 0.008, length);
-            }
-
-            function pad(notes, t, length) {
-                notes.forEach(function(note) {
-                    [-7, 7].forEach(function(cents) {
-                        var osc = ctx.createOscillator();
-                        var amp = ctx.createGain();
-                        osc.type = 'sawtooth';
-                        osc.frequency.value = mtof(note);
-                        osc.detune.value = cents;
-                        osc.connect(amp);
-                        amp.connect(padBus);
-                        amp.gain.setValueAtTime(0.0001, t);
-                        amp.gain.linearRampToValueAtTime(0.006, t + 1.4);
-                        amp.gain.linearRampToValueAtTime(0.0001, t + length);
-                        osc.start(t);
-                        osc.stop(t + length + 0.1);
-                    });
-                });
+                envelope(amp, t, peak, 0.04, length);
+                body.start(t);
+                bell.start(t);
+                body.stop(t + length + 0.1);
+                bell.stop(t + length + 0.1);
             }
 
             function bass(midi, t, length) {
@@ -2790,7 +2706,7 @@
                 osc.frequency.value = mtof(midi);
                 osc.connect(amp);
                 amp.connect(master);
-                envelope(amp, t, 0.3, 0.02, length);
+                envelope(amp, t, 0.32, 0.02, length);
                 osc.start(t);
                 osc.stop(t + length + 0.1);
             }
@@ -2798,16 +2714,16 @@
             function kick(t, peak) {
                 var osc = ctx.createOscillator();
                 var amp = ctx.createGain();
-                osc.frequency.setValueAtTime(100, t);
-                osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+                osc.frequency.setValueAtTime(110, t);
+                osc.frequency.exponentialRampToValueAtTime(42, t + 0.14);
                 osc.connect(amp);
                 amp.connect(drumBus);
-                envelope(amp, t, peak, 0.006, 0.35);
+                envelope(amp, t, peak, 0.005, 0.32);
                 osc.start(t);
-                osc.stop(t + 0.45);
+                osc.stop(t + 0.4);
             }
 
-            function noiseHit(t, type, freq, peak, length, dest) {
+            function noiseHit(t, type, freq, peak, length) {
                 var src = ctx.createBufferSource();
                 var filter = ctx.createBiquadFilter();
                 var amp = ctx.createGain();
@@ -2816,52 +2732,10 @@
                 filter.frequency.value = freq;
                 src.connect(filter);
                 filter.connect(amp);
-                amp.connect(dest || drumBus);
+                amp.connect(drumBus);
                 envelope(amp, t, peak, 0.004, length);
                 src.start(t, Math.random() * 0.5);
                 src.stop(t + length + 0.05);
-            }
-
-            function snareBody(t) {
-                var osc = ctx.createOscillator();
-                var amp = ctx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(190, t);
-                osc.frequency.exponentialRampToValueAtTime(120, t + 0.1);
-                osc.connect(amp);
-                amp.connect(drumBus);
-                envelope(amp, t, 0.18, 0.003, 0.12);
-                osc.start(t);
-                osc.stop(t + 0.15);
-            }
-
-            function windowTap(t) {
-                var osc = ctx.createOscillator();
-                var amp = ctx.createGain();
-                osc.frequency.value = 2200 + Math.random() * 2200;
-                osc.connect(amp);
-                amp.connect(ambience);
-                envelope(amp, t, 0.012 + Math.random() * 0.01, 0.002, 0.04);
-                osc.start(t);
-                osc.stop(t + 0.06);
-            }
-
-            function thunder(t) {
-                var src = ctx.createBufferSource();
-                var rumble = ctx.createBiquadFilter();
-                var amp = ctx.createGain();
-                src.buffer = noiseBuffer;
-                src.loop = true;
-                rumble.type = 'lowpass';
-                rumble.frequency.value = 110;
-                src.connect(rumble);
-                rumble.connect(amp);
-                amp.connect(ambience);
-                amp.gain.setValueAtTime(0.0001, t);
-                amp.gain.exponentialRampToValueAtTime(0.9, t + 1.6);
-                amp.gain.exponentialRampToValueAtTime(0.0001, t + 8);
-                src.start(t);
-                src.stop(t + 8.2);
             }
 
             function scheduleStep(n, t) {
@@ -2869,27 +2743,17 @@
                 var chord = CHORDS[Math.floor(n / 8) % CHORDS.length];
                 if (beat === 0) {
                     chord.notes.forEach(function(note, i) {
-                        piano(note, t + i * 0.03, EIGHTH * 7, 0.085);
+                        keys(note, t + i * 0.025, EIGHTH * 7.5, 0.09);
                     });
-                    pad(chord.notes, t, EIGHTH * 8);
-                    bass(chord.bass, t, EIGHTH * 3.5);
-                    kick(t, 0.8);
+                    bass(chord.bass, t, EIGHTH * 3);
                 }
-                // Boom-bap: a second kick on the "and" of two, snare with a woody body on 2 and 4
-                if (beat === 3) kick(t, 0.55);
-                if (beat === 5) bass(chord.bass + 12, t, EIGHTH * 1.5);
-                if (beat === 2 || beat === 6) {
-                    noiseHit(t, 'bandpass', 1800, 0.2, 0.2);
-                    snareBody(t);
-                }
-                if (Math.random() < 0.75) noiseHit(t, 'highpass', 8000, beat % 2 ? 0.02 : 0.035, 0.05);
-                if ((beat === 3 || beat === 7) && Math.random() < 0.3) {
-                    piano(MELODY[Math.floor(Math.random() * MELODY.length)], t, EIGHTH * 5, 0.05);
-                }
-                if (Math.random() < 0.3) windowTap(t + Math.random() * EIGHTH);
-                if (t > thunderAt) {
-                    thunder(t);
-                    thunderAt = t + 70 + Math.random() * 90;
+                if (beat === 5) bass(chord.bass + 7, t, EIGHTH * 2);
+                if (beat === 0) kick(t, 0.75);
+                if (beat === 5) kick(t, 0.5);
+                if (beat === 2 || beat === 6) noiseHit(t, 'bandpass', 1700, 0.22, 0.16);
+                if (Math.random() < 0.85) noiseHit(t, 'highpass', 7500, beat % 2 ? 0.04 : 0.07, 0.05);
+                if ((beat === 3 || beat === 7) && Math.random() < 0.35) {
+                    keys(MELODY[Math.floor(Math.random() * MELODY.length)], t, EIGHTH * 3, 0.06);
                 }
             }
 
@@ -2911,7 +2775,7 @@
                     nextTime = ctx.currentTime + 0.15;
                     master.gain.cancelScheduledValues(ctx.currentTime);
                     master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-                    master.gain.linearRampToValueAtTime(0.24, ctx.currentTime + 3);
+                    master.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 2.5);
                     timer = setInterval(pump, 60);
                 } catch (e) { running = false; }
             }
