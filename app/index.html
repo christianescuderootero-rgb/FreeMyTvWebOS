@@ -1128,13 +1128,6 @@
                             <option value="off">Off</option>
                         </select>
                     </div>
-                    <div class="field-group">
-                        <label>Lofi Music</label>
-                        <select class="field-input modal-nav" id="cfgLofiMusic">
-                            <option value="on">On (Rainy Chill Beats)</option>
-                            <option value="off">Off</option>
-                        </select>
-                    </div>
                 </div>
                 <div class="settings-row" style="margin-top: 14px;">
                     <div class="field-group">
@@ -1330,7 +1323,6 @@
             clockFormat: localStorage.getItem('fmtv_clock_format') || (IS_US_LOCALE ? '12h' : '24h'),
             tempUnit: localStorage.getItem('fmtv_temp_unit') || (IS_US_LOCALE ? 'F' : 'C'),
             lofiScene: localStorage.getItem('fmtv_lofi_scene') || 'on',
-            lofiMusic: localStorage.getItem('fmtv_lofi_music') || 'on',
             // Set of app IDs reported installed by the TV; null until discovery succeeds.
             installedIds: null,
             perfMode: localStorage.getItem('fmtv_perf_mode') || 'standard',
@@ -2126,7 +2118,6 @@
             document.getElementById('cfgClockFormat').value = state.clockFormat;
             document.getElementById('cfgTempUnit').value = state.tempUnit;
             document.getElementById('cfgLofiScene').value = state.lofiScene;
-            document.getElementById('cfgLofiMusic').value = state.lofiMusic;
             document.getElementById('cfgPerfMode').value = state.perfMode;
             document.getElementById('cfgTmdbKey').value = state.tmdbKey;
 
@@ -2334,7 +2325,6 @@
             document.getElementById('cfgClockFormat').value = IS_US_LOCALE ? '12h' : '24h';
             document.getElementById('cfgTempUnit').value = IS_US_LOCALE ? 'F' : 'C';
             document.getElementById('cfgLofiScene').value = 'on';
-            document.getElementById('cfgLofiMusic').value = 'on';
             document.getElementById('cfgPerfMode').value = 'standard';
             document.getElementById('cfgTmdbKey').value = '';
             renderAppSelectorGrid();
@@ -2351,7 +2341,6 @@
             state.clockFormat = document.getElementById('cfgClockFormat').value;
             state.tempUnit = document.getElementById('cfgTempUnit').value;
             state.lofiScene = document.getElementById('cfgLofiScene').value;
-            state.lofiMusic = document.getElementById('cfgLofiMusic').value;
             state.perfMode = document.getElementById('cfgPerfMode').value;
             state.tmdbKey = document.getElementById('cfgTmdbKey').value.trim();
 
@@ -2361,7 +2350,6 @@
             localStorage.setItem('fmtv_clock_format', state.clockFormat);
             localStorage.setItem('fmtv_temp_unit', state.tempUnit);
             localStorage.setItem('fmtv_lofi_scene', state.lofiScene);
-            localStorage.setItem('fmtv_lofi_music', state.lofiMusic);
             localStorage.setItem('fmtv_perf_mode', state.perfMode);
             localStorage.setItem('fmtv_tmdb_key', state.tmdbKey);
 
@@ -2597,219 +2585,9 @@
             document.getElementById('lofiStreet').innerHTML = '<defs>' + defs + '</defs>' + parts.join('');
         }
 
-        // --- Lofi Music ---
-        // Chill beats synthesized live with Web Audio: Rhodes-style chords with tape wobble,
-        // a soft bass, swung drums and vinyl crackle. No audio files or streams, so it works
-        // offline and plays only while this home screen is visible.
-        var lofiMusic = (function() {
-            var AudioCtx = window.AudioContext || window.webkitAudioContext;
-            var ctx = null, master = null, keysBus = null, drumBus = null, wobble = null, crackleGain = null;
-            var noiseBuffer = null, timer = null, running = false;
-            var step = 0, nextTime = 0;
-            var EIGHTH = 60 / 70 / 2;
-            // ii-V-I-vi in C: bass root + jazzy voicing, one bar each (MIDI note numbers)
-            var CHORDS = [
-                { bass: 38, notes: [53, 57, 60, 64] }, // Dm9
-                { bass: 43, notes: [53, 59, 64, 69] }, // G13
-                { bass: 36, notes: [52, 55, 59, 62] }, // Cmaj9
-                { bass: 45, notes: [55, 59, 60, 64] }  // Am9
-            ];
-            var MELODY = [72, 74, 76, 79, 81, 84];
-
-            function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-
-            function init() {
-                ctx = new AudioCtx();
-                var warmth = ctx.createBiquadFilter();
-                warmth.type = 'lowpass';
-                warmth.frequency.value = 2600;
-                var glue = ctx.createDynamicsCompressor();
-                master = ctx.createGain();
-                master.gain.value = 0;
-                master.connect(warmth);
-                warmth.connect(glue);
-                glue.connect(ctx.destination);
-
-                keysBus = ctx.createGain();
-                keysBus.gain.value = 0.55;
-                keysBus.connect(master);
-                drumBus = ctx.createGain();
-                drumBus.gain.value = 0.7;
-                drumBus.connect(master);
-
-                // Slow pitch wobble shared by every keys voice, like a worn cassette
-                wobble = ctx.createGain();
-                wobble.gain.value = 9;
-                var lfo = ctx.createOscillator();
-                lfo.frequency.value = 0.35;
-                lfo.connect(wobble);
-                lfo.start();
-
-                noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-                var data = noiseBuffer.getChannelData(0);
-                for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-
-                // Vinyl: faint hiss plus sparse pops, looped
-                var vinylBuffer = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-                var vinyl = vinylBuffer.getChannelData(0);
-                for (var j = 0; j < vinyl.length; j++) {
-                    vinyl[j] = (Math.random() * 2 - 1) * 0.04 + (Math.random() < 0.0004 ? (Math.random() * 2 - 1) * 0.9 : 0);
-                }
-                var crackle = ctx.createBufferSource();
-                crackle.buffer = vinylBuffer;
-                crackle.loop = true;
-                var crackleTone = ctx.createBiquadFilter();
-                crackleTone.type = 'bandpass';
-                crackleTone.frequency.value = 3000;
-                crackleGain = ctx.createGain();
-                crackleGain.gain.value = 0.35;
-                crackle.connect(crackleTone);
-                crackleTone.connect(crackleGain);
-                crackleGain.connect(master);
-                crackle.start();
-            }
-
-            function envelope(gainNode, t, peak, attack, length) {
-                gainNode.gain.setValueAtTime(0.0001, t);
-                gainNode.gain.exponentialRampToValueAtTime(peak, t + attack);
-                gainNode.gain.exponentialRampToValueAtTime(0.0001, t + length);
-            }
-
-            function keys(midi, t, length, peak) {
-                var body = ctx.createOscillator();
-                var bell = ctx.createOscillator();
-                var bellLevel = ctx.createGain();
-                var amp = ctx.createGain();
-                body.type = 'sine';
-                bell.type = 'triangle';
-                body.frequency.value = mtof(midi);
-                bell.frequency.value = mtof(midi) * 2;
-                bell.detune.value = 5;
-                bellLevel.gain.value = 0.15;
-                wobble.connect(body.detune);
-                wobble.connect(bell.detune);
-                body.connect(amp);
-                bell.connect(bellLevel);
-                bellLevel.connect(amp);
-                amp.connect(keysBus);
-                envelope(amp, t, peak, 0.04, length);
-                body.start(t);
-                bell.start(t);
-                body.stop(t + length + 0.1);
-                bell.stop(t + length + 0.1);
-            }
-
-            function bass(midi, t, length) {
-                var osc = ctx.createOscillator();
-                var amp = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = mtof(midi);
-                osc.connect(amp);
-                amp.connect(master);
-                envelope(amp, t, 0.32, 0.02, length);
-                osc.start(t);
-                osc.stop(t + length + 0.1);
-            }
-
-            function kick(t, peak) {
-                var osc = ctx.createOscillator();
-                var amp = ctx.createGain();
-                osc.frequency.setValueAtTime(110, t);
-                osc.frequency.exponentialRampToValueAtTime(42, t + 0.14);
-                osc.connect(amp);
-                amp.connect(drumBus);
-                envelope(amp, t, peak, 0.005, 0.32);
-                osc.start(t);
-                osc.stop(t + 0.4);
-            }
-
-            function noiseHit(t, type, freq, peak, length) {
-                var src = ctx.createBufferSource();
-                var filter = ctx.createBiquadFilter();
-                var amp = ctx.createGain();
-                src.buffer = noiseBuffer;
-                filter.type = type;
-                filter.frequency.value = freq;
-                src.connect(filter);
-                filter.connect(amp);
-                amp.connect(drumBus);
-                envelope(amp, t, peak, 0.004, length);
-                src.start(t, Math.random() * 0.5);
-                src.stop(t + length + 0.05);
-            }
-
-            function scheduleStep(n, t) {
-                var beat = n % 8;
-                var chord = CHORDS[Math.floor(n / 8) % CHORDS.length];
-                if (beat === 0) {
-                    chord.notes.forEach(function(note, i) {
-                        keys(note, t + i * 0.025, EIGHTH * 7.5, 0.09);
-                    });
-                    bass(chord.bass, t, EIGHTH * 3);
-                }
-                if (beat === 5) bass(chord.bass + 7, t, EIGHTH * 2);
-                if (beat === 0) kick(t, 0.75);
-                if (beat === 5) kick(t, 0.5);
-                if (beat === 2 || beat === 6) noiseHit(t, 'bandpass', 1700, 0.22, 0.16);
-                if (Math.random() < 0.85) noiseHit(t, 'highpass', 7500, beat % 2 ? 0.04 : 0.07, 0.05);
-                if ((beat === 3 || beat === 7) && Math.random() < 0.35) {
-                    keys(MELODY[Math.floor(Math.random() * MELODY.length)], t, EIGHTH * 3, 0.06);
-                }
-            }
-
-            function pump() {
-                while (nextTime < ctx.currentTime + 0.3) {
-                    // Lazy swing: every off-beat eighth lands a little late
-                    scheduleStep(step, nextTime + (step % 2 ? EIGHTH * 0.2 : 0));
-                    nextTime += EIGHTH;
-                    step++;
-                }
-            }
-
-            function start() {
-                if (!AudioCtx || running) return;
-                try {
-                    if (!ctx) init();
-                    if (ctx.state === 'suspended') ctx.resume();
-                    running = true;
-                    nextTime = ctx.currentTime + 0.15;
-                    master.gain.cancelScheduledValues(ctx.currentTime);
-                    master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-                    master.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 2.5);
-                    timer = setInterval(pump, 60);
-                } catch (e) { running = false; }
-            }
-
-            function stop() {
-                if (!running) return;
-                running = false;
-                clearInterval(timer);
-                master.gain.cancelScheduledValues(ctx.currentTime);
-                master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-                master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
-                setTimeout(function() { if (!running && ctx) ctx.suspend(); }, 500);
-            }
-
-            // Browsers may hold audio until the first user input; any remote press unlocks it.
-            function unlock() {
-                if (running && ctx && ctx.state === 'suspended') ctx.resume();
-            }
-
-            return { start: start, stop: stop, unlock: unlock };
-        })();
-
         function applyLofi() {
             document.body.classList.toggle('lofi-on', state.lofiScene === 'on');
-            if (state.lofiMusic === 'on' && !document.hidden) lofiMusic.start();
-            else lofiMusic.stop();
         }
-
-        document.addEventListener('keydown', function() { lofiMusic.unlock(); }, true);
-        // Launching another app hides this page, so the music pauses and returns with it.
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) lofiMusic.stop();
-            else if (state.lofiMusic === 'on') lofiMusic.start();
-        });
 
         // --- Boot Sequence ---
         buildLofiScene();
